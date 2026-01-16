@@ -14,6 +14,12 @@ pub fn main() !void {
 
         // Capture the user's command
         const command = try stdin.takeDelimiter('\n');
-        try stdout.print("{s}: command not found\n", .{command.?});
+
+        if (command) |cmd| {
+            if (std.mem.eql(u8, cmd, "exit")) {
+                break;
+            }
+            try stdout.print("{s}: command not found\n", .{cmd});
+        }
     }
 }
