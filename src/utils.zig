@@ -3,7 +3,7 @@ const mem = std.mem;
 const builtin = @import("builtin");
 
 pub const ParserError = error{ InvalidArgs, TooManyArgs, EmptyInput, BadInput };
-pub const RuntimeError = error{CommandNotFound};
+pub const RuntimeError = error{CommandNotFound, InvalidArgs};
 
 pub const ExternalCommand = struct { cmd: []const u8, args: ?[]const u8 };
 

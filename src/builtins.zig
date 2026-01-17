@@ -32,7 +32,22 @@ pub const History = struct {
 
     fn print(self: *History, writer: *std.io.Writer) !void {
         for (self.history.items, 1..) |entry, i| {
-            try writer.print("   {d}  {s}\n", .{i, entry});
+            try writer.print("   {d}  {s}\n", .{ i, entry });
+        }
+    }
+
+    fn print_last_n(self: *History, writer: *std.io.Writer, n: usize) !void {
+        if (n == 0) {
+            return;
+        }
+        const n_history = self.history.items.len;
+        if (n >= n_history) {
+            try self.print(writer);
+            return;
+        }
+        for ((n_history - n)..n_history) |i| {
+            const entry = self.history.items[i];
+            try writer.print("   {d}  {s}\n", .{ i + 1, entry });
         }
     }
 };
@@ -41,8 +56,25 @@ pub fn echo(writer: *std.io.Writer, args: []const u8) !void {
     try writer.print("{s}\n", .{args});
 }
 
-pub fn history(writer: *std.io.Writer, hist: *History) !void {
-    try hist.print(writer);
+pub fn history(writer: *std.io.Writer, hist: *History, args: []const u8) !void {
+    if (args.len == 0) {
+        try hist.print(writer);
+        return;
+    }
+    const args_trimmed = mem.trim(u8, args, " ");
+    const n = std.fmt.parseInt(usize, args_trimmed, 10) catch |err| {
+        switch (err) {
+            std.fmt.ParseIntError.InvalidCharacter => {
+                try writer.print("Error: `history` accepts at most 1 integer argument, got `{s}`\n", .{args_trimmed});
+                return RuntimeError.InvalidArgs;
+            },
+            std.fmt.ParseIntError.Overflow => {
+                try writer.print("Error: number too large `{s}`\n", .{args_trimmed});
+                return RuntimeError.InvalidArgs;
+            },
+        }
+    };
+    try hist.print_last_n(writer, n);
 }
 
 pub fn type_of_cmd(allocator: mem.Allocator, writer: *std.io.Writer, args: []const u8) !void {
