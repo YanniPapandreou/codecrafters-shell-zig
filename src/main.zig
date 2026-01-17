@@ -47,8 +47,13 @@ fn search_path(allocator: mem.Allocator, path: []u8, cmd: []const u8) ![]u8 {
         var iter_dir = dir.iterate();
         while (try iter_dir.next()) |entry| {
             if (entry.kind == .file and mem.eql(u8, entry.name, cmd)) {
-                const cmd_path = try std.fs.path.join(allocator, &[_][]const u8{ p, entry.name });
-                return cmd_path;
+                const cmd_stat = try dir.statFile(entry.name);
+                if ((cmd_stat.mode & 0o111) != 0) {
+                    const cmd_path = try std.fs.path.join(allocator, &[_][]const u8{ p, entry.name });
+                    return cmd_path;
+                } else {
+                    continue;
+                }
             }
         }
     }
@@ -74,7 +79,7 @@ fn type_of_cmd(allocator: mem.Allocator, writer: *std.io.Writer, args: []const u
                 else => unreachable,
             }
         };
-        try writer.print("{s} is {s}\n", .{args, full_path});
+        try writer.print("{s} is {s}\n", .{ args, full_path });
     }
 }
 
