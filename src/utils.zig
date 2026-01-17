@@ -94,5 +94,5 @@ pub fn run_external(allocator: mem.Allocator, writer: *std.io.Writer, external_c
     // on success, we own the output streams
     defer allocator.free(proc.stdout);
     defer allocator.free(proc.stderr);
-    try writer.print("{s}\n", .{proc.stdout});
+    try writer.print("{s}", .{proc.stdout});
 }
