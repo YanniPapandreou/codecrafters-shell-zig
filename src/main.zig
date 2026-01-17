@@ -28,6 +28,9 @@ pub fn main() !void {
             } else if (mem.startsWith(u8, cmd, "echo")) {
                 const args = try utils.get_args("echo", cmd);
                 try builtins.echo(stdout, args);
+            } else if (mem.startsWith(u8, cmd, "history")) {
+                const args = try utils.get_args("history", cmd);
+                try builtins.history(stdout, args);
             } else if (mem.startsWith(u8, cmd, "type")) {
                 const args = try utils.get_args("type", cmd);
                 try builtins.type_of_cmd(repl_allocator, stdout, args);

@@ -2,7 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const builtin = @import("builtin");
 
-pub const ParserError = error{ InvalidArgs, TooManyArgs, EmptyInput };
+pub const ParserError = error{ InvalidArgs, TooManyArgs, EmptyInput, BadInput };
 pub const RuntimeError = error{CommandNotFound};
 
 pub const ExternalCommand = struct { cmd: []const u8, args: ?[]const u8 };
@@ -10,6 +10,12 @@ pub const ExternalCommand = struct { cmd: []const u8, args: ?[]const u8 };
 pub const pathListSep: u8 = if (builtin.os.tag == .windows) ';' else ':';
 
 pub fn get_args(cmd: []const u8, input: []const u8) ParserError![]const u8 {
+    if (!mem.containsAtLeast(u8, input, 1, cmd)) {
+        return ParserError.BadInput;
+    }
+    if (mem.eql(u8, input, cmd)) {
+        return "";
+    }
     const cmd_len = cmd.len + 1;
     if (cmd_len >= input.len) {
         return ParserError.InvalidArgs;
