@@ -5,6 +5,14 @@ const builtins = @import("builtins");
 const utils = @import("utils");
 const History = builtins.History;
 
+// import c readline headers
+const c = @cImport({
+    @cInclude("stdio.h");
+    @cInclude("stdlib.h");
+    @cInclude("readline/readline.h");
+    @cInclude("readline/history.h");
+});
+
 var stdout_writer = std.fs.File.stdout().writerStreaming(&.{});
 const stdout = &stdout_writer.interface;
 
@@ -19,29 +27,35 @@ pub fn main() !void {
     var repl_history = try History.init(repl_allocator);
     defer repl_history.deinit();
     while (true) {
-        // Print the prompt
-        try stdout.print("$ ", .{});
+        // Use readline for input with prompt
+        const prompt = "$ ";
+        const c_input = c.readline(prompt);
+        if (c_input == null) break; // EOF (Ctrl-D)
 
-        // Capture the user's command
-        const command = try stdin.takeDelimiter('\n');
+        defer c.free(c_input);
 
-        if (command) |cmd| {
-            try repl_history.append(cmd);
-            if (mem.eql(u8, cmd, "exit")) {
-                break;
-            } else if (mem.startsWith(u8, cmd, "echo")) {
-                const args = try utils.get_args("echo", cmd);
-                try builtins.echo(stdout, args);
-            } else if (mem.startsWith(u8, cmd, "history")) {
-                const args = try utils.get_args("history", cmd);
-                try builtins.history(stdout, &repl_history, args);
-            } else if (mem.startsWith(u8, cmd, "type")) {
-                const args = try utils.get_args("type", cmd);
-                try builtins.type_of_cmd(repl_allocator, stdout, args);
-            } else {
-                const external_cmd = utils.parse_external(cmd) orelse continue;
-                try utils.run_external(repl_allocator, stdout, external_cmd);
-            }
+        // Convert C string to Zig slice
+        const command = std.mem.span(c_input);
+        if (command.len == 0) continue;
+
+        // Add to readline's in-memory history
+        _ = c.add_history(c_input);
+
+        try repl_history.append(command);
+        if (mem.eql(u8, command, "exit")) {
+            break;
+        } else if (mem.startsWith(u8, command, "echo")) {
+            const args = try utils.get_args("echo", command);
+            try builtins.echo(stdout, args);
+        } else if (mem.startsWith(u8, command, "history")) {
+            const args = try utils.get_args("history", command);
+            try builtins.history(stdout, &repl_history, args);
+        } else if (mem.startsWith(u8, command, "type")) {
+            const args = try utils.get_args("type", command);
+            try builtins.type_of_cmd(repl_allocator, stdout, args);
+        } else {
+            const external_cmd = utils.parse_external(command) orelse continue;
+            try utils.run_external(repl_allocator, stdout, external_cmd);
         }
     }
 }
