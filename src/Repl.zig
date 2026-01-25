@@ -28,15 +28,8 @@ out: *std.Io.Writer,
 
 pub fn init(allocator: Allocator, prompt: []const u8, in: *std.Io.Reader, out: *std.Io.Writer) !Repl {
     var history = try History.init(allocator);
-    const HISTFILE = std.process.getEnvVarOwned(allocator, "HISTFILE") catch |err|
-        switch (err) {
-            std.process.GetEnvVarOwnedError.EnvironmentVariableNotFound => "",
-            else => return err,
-        };
-    defer allocator.free(HISTFILE);
-    if (!mem.eql(u8, HISTFILE, "")) {
-        try history.read_from_file(HISTFILE);
-    }
+    // try to load history from file specified by env var HISTFILE (if exists)
+    try history.startup();
 
     return Repl{
         .allocator = allocator,

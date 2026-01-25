@@ -20,6 +20,10 @@ pub const History = struct {
     }
 
     pub fn deinit(self: *History) void {
+        const HISTFILE = self.get_histfile() catch "";
+        if (!mem.eql(u8, HISTFILE, "")) {
+            self.write_to_file(HISTFILE, true) catch unreachable;
+        }
         for (self.history.items) |line| {
             self.allocator.free(line);
         }
@@ -53,7 +57,7 @@ pub const History = struct {
         }
     }
 
-    pub fn read_from_file(self: *History, path: []const u8) !void {
+    fn read_from_file(self: *History, path: []const u8) !void {
         // get file contents
         const file_contents = try std.fs.cwd().readFileAlloc(self.allocator, path, 1024 * 1024);
         defer self.allocator.free(file_contents);
@@ -89,6 +93,23 @@ pub const History = struct {
             _ = try handle.write(entry);
             _ = try handle.write("\n");
             self.save_loc += 1;
+        }
+    }
+
+    fn get_histfile(self: *History) ![]const u8 {
+        const HISTFILE = std.process.getEnvVarOwned(self.allocator, "HISTFILE") catch |err|
+            switch (err) {
+                std.process.GetEnvVarOwnedError.EnvironmentVariableNotFound => "",
+                else => return err,
+            };
+        return HISTFILE;
+    }
+
+    pub fn startup(self: *History) !void {
+        const HISTFILE = try self.get_histfile();
+        defer self.allocator.free(HISTFILE);
+        if (!mem.eql(u8, HISTFILE, "")) {
+            try self.read_from_file(HISTFILE);
         }
     }
 };
