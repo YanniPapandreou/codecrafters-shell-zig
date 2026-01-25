@@ -185,14 +185,22 @@ pub fn pwd(allocator: mem.Allocator, writer: *std.Io.Writer) !void {
     try writer.print("{s}\n", .{cwd});
 }
 
-pub fn cd(writer: *std.Io.Writer, args: []const u8) !void {
+pub fn cd(allocator: mem.Allocator, writer: *std.Io.Writer, args: []const u8) !void {
     if (args.len == 0) {
         return ParserError.InvalidArgs;
     }
-    var dir = std.fs.openDirAbsolute(args, .{}) catch |err|
+    const path = std.fs.realpathAlloc(allocator, args) catch |err|
+        switch (err) {
+            std.posix.RealPathError.FileNotFound => {
+                try writer.print("cd: {s}: No such file or directory\n", .{args});
+                return;
+            },
+            else => return err,
+        };
+    var dir = std.fs.openDirAbsolute(path, .{}) catch |err|
         switch (err) {
             std.fs.File.OpenError.FileNotFound => {
-                try writer.print("cd: {s}: No such file or directory\n", .{args});
+                try writer.print("cd: {s}: No such file or directory\n", .{path});
                 return;
             },
             else => return err,
