@@ -79,8 +79,6 @@ pub const History = struct {
             _ = try handle.write(entry);
             _ = try handle.write("\n");
         }
-        // append trailing new line character
-        _ = try handle.write("\n");
     }
 };
 
