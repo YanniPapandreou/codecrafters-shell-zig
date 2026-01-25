@@ -3,13 +3,15 @@ const mem = std.mem;
 const builtin = @import("builtin");
 
 pub const ParserError = error{ InvalidArgs, TooManyArgs, EmptyInput, BadInput };
-pub const RuntimeError = error{CommandNotFound, InvalidArgs};
+pub const RuntimeError = error{ CommandNotFound, InvalidArgs };
 
 pub const ExternalCommand = struct { cmd: []const u8, args: ?[]const u8 };
 
 pub const pathListSep: u8 = if (builtin.os.tag == .windows) ';' else ':';
 
-pub fn get_args(cmd: []const u8, input: []const u8) ParserError![]const u8 {
+const ArgList = std.ArrayList([]const u8);
+
+pub fn get_args_str(cmd: []const u8, input: []const u8) ParserError![]const u8 {
     if (!mem.containsAtLeast(u8, input, 1, cmd)) {
         return ParserError.BadInput;
     }
@@ -21,6 +23,34 @@ pub fn get_args(cmd: []const u8, input: []const u8) ParserError![]const u8 {
         return ParserError.InvalidArgs;
     }
     return input[cmd_len..];
+}
+
+// parses arguments, handling single quotes for grouping; caller owns memory of returned ArgList
+pub fn get_args(allocator: mem.Allocator, cmd: []const u8, input: []const u8) ParserError!ArgList {
+    const args_str = try get_args_str(cmd, input);
+    var args = ArgList.empty;
+    var quote_open: bool = false;
+    var arg = std.ArrayList(u8).empty;
+    for (args_str) |c| {
+        switch (c) {
+            '\'' => {
+                quote_open = !quote_open;
+                if (!quote_open) {
+                    const new_arg = try arg.toOwnedSlice(allocator);
+                    try args.append(allocator, new_arg);
+                }
+            },
+            ' ' => {
+                if (quote_open) {
+                    try arg.append(allocator, c);
+                }
+            },
+            else => {
+                try arg.append(allocator, c);
+            },
+        }
+    }
+    return args;
 }
 
 fn get_path(allocator: mem.Allocator) ![]u8 {
@@ -70,7 +100,6 @@ pub fn parse_external(input: []const u8) ?ExternalCommand {
     }
     return ExternalCommand{ .cmd = input, .args = null };
 }
-
 
 pub fn run_external(allocator: mem.Allocator, writer: *std.Io.Writer, external_cmd: ExternalCommand) !void {
     const full_path = find_exec(allocator, external_cmd.cmd) catch |err| {

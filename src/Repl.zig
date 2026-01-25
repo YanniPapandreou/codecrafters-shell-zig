@@ -75,16 +75,16 @@ pub fn process_line(self: *Repl, line: []const u8) !ReplSignal {
     } else if (mem.eql(u8, line, "pwd")) {
         try builtins.pwd(self.allocator, self.out);
     } else if (mem.startsWith(u8, line, "echo")) {
-        const args = try utils.get_args("echo", line);
+        const args = try utils.get_args_str("echo", line);
         try builtins.echo(self.out, args);
     } else if (mem.startsWith(u8, line, "history")) {
-        const args = try utils.get_args("history", line);
+        const args = try utils.get_args_str("history", line);
         try builtins.history(self.out, &self.history, args);
     } else if (mem.startsWith(u8, line, "type")) {
-        const args = try utils.get_args("type", line);
+        const args = try utils.get_args_str("type", line);
         try builtins.type_of_cmd(self.allocator, self.out, args);
     } else if (mem.startsWith(u8, line, "cd")) {
-        const args = try utils.get_args("cd", line);
+        const args = try utils.get_args_str("cd", line);
         try builtins.cd(self.allocator, self.out, args);
     } else {
         const external_cmd = utils.parse_external(line) orelse return .Continue;
