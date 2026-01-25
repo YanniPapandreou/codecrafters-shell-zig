@@ -189,14 +189,17 @@ pub fn cd(allocator: mem.Allocator, writer: *std.Io.Writer, args: []const u8) !v
     if (args.len == 0) {
         return ParserError.InvalidArgs;
     }
-    const path = std.fs.realpathAlloc(allocator, args) catch |err|
-        switch (err) {
-            std.posix.RealPathError.FileNotFound => {
-                try writer.print("cd: {s}: No such file or directory\n", .{args});
-                return;
-            },
-            else => return err,
-        };
+    const path = if (mem.eql(u8, args, "~"))
+        try std.process.getEnvVarOwned(allocator, "HOME")
+    else
+        std.fs.realpathAlloc(allocator, args) catch |err|
+            switch (err) {
+                std.posix.RealPathError.FileNotFound => {
+                    try writer.print("cd: {s}: No such file or directory\n", .{args});
+                    return;
+                },
+                else => return err,
+            };
     var dir = std.fs.openDirAbsolute(path, .{}) catch |err|
         switch (err) {
             std.fs.File.OpenError.FileNotFound => {
