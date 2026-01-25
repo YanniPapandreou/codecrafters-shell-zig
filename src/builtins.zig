@@ -161,7 +161,8 @@ pub fn type_of_cmd(allocator: mem.Allocator, writer: *std.Io.Writer, args: []con
         mem.eql(u8, args, "echo") or
         mem.eql(u8, args, "history") or
         mem.eql(u8, args, "type") or
-        mem.eql(u8, args, "pwd"))
+        mem.eql(u8, args, "pwd") or
+        mem.eql(u8, args, "cd"))
     {
         try writer.print("{s} is a shell builtin\n", .{args});
     } else {
@@ -179,7 +180,17 @@ pub fn type_of_cmd(allocator: mem.Allocator, writer: *std.Io.Writer, args: []con
 }
 
 pub fn pwd(allocator: mem.Allocator, writer: *std.Io.Writer) !void {
-    const PWD = try std.process.getEnvVarOwned(allocator, "PWD");
-    defer allocator.free(PWD);
-    try writer.print("{s}\n", .{PWD});
+    const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
+    defer allocator.free(cwd);
+    try writer.print("{s}\n", .{cwd});
+}
+
+pub fn cd(writer: *std.Io.Writer, args: []const u8) !void {
+    _ = writer;
+    if (args.len == 0) {
+        return ParserError.InvalidArgs;
+    }
+    var dir = try std.fs.openDirAbsolute(args, .{});
+    defer dir.close();
+    try dir.setAsCwd();
 }

@@ -83,6 +83,9 @@ pub fn process_line(self: *Repl, line: []const u8) !ReplSignal {
     } else if (mem.startsWith(u8, line, "type")) {
         const args = try utils.get_args("type", line);
         try builtins.type_of_cmd(self.allocator, self.out, args);
+    } else if (mem.startsWith(u8, line, "cd")) {
+        const args = try utils.get_args("cd", line);
+        try builtins.cd(self.out, args);
     } else {
         const external_cmd = utils.parse_external(line) orelse return .Continue;
         try utils.run_external(self.allocator, self.out, external_cmd);
