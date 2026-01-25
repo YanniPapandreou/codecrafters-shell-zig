@@ -8,12 +8,14 @@ const RuntimeError = utils.RuntimeError;
 pub const History = struct {
     allocator: mem.Allocator,
     history: std.ArrayList([]const u8),
+    save_loc: usize,
 
     pub fn init(allocator: mem.Allocator) !History {
         const hist = try std.ArrayList([]const u8).initCapacity(allocator, 0);
         return History{
             .allocator = allocator,
             .history = hist,
+            .save_loc = 0,
         };
     }
 
@@ -68,16 +70,25 @@ pub const History = struct {
         }
     }
 
-    fn write_to_file(self: *History, path: []const u8) !void {
+    fn write_to_file(self: *History, path: []const u8, should_append: bool) !void {
         const cwd = std.fs.cwd();
         const handle = try cwd.createFile(path, .{
-            .truncate = true,
+            // set truncate based on whether we are appending or not
+            .truncate = if (should_append) false else true,
         });
         defer handle.close();
 
-        for (self.history.items) |entry| {
+        if (should_append) {
+            // go to end of file to append
+            try handle.seekFromEnd(0);
+        }
+
+        const start_index = if (should_append) self.save_loc else 0;
+
+        for (self.history.items[start_index..]) |entry| {
             _ = try handle.write(entry);
             _ = try handle.write("\n");
+            self.save_loc += 1;
         }
     }
 };
@@ -98,7 +109,11 @@ pub fn history(writer: *std.io.Writer, hist: *History, args: []const u8) !void {
         return;
     } else if (mem.startsWith(u8, args_trimmed, "-w ")) {
         const path = args_trimmed[3..];
-        try hist.write_to_file(path);
+        try hist.write_to_file(path, false);
+        return;
+    } else if (mem.startsWith(u8, args_trimmed, "-a ")) {
+        const path = args_trimmed[3..];
+        try hist.write_to_file(path, true);
         return;
     }
     const n = std.fmt.parseInt(usize, args_trimmed, 10) catch |err| {
