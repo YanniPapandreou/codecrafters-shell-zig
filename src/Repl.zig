@@ -86,8 +86,14 @@ pub fn process_line(self: *Repl, line: []const u8) !ReplSignal {
 
 pub fn run(self: *Repl) !void {
     while (true) {
-        const line = try self.readLine();
-        const signal = try self.process_line(line);
+        const line = self.readLine() catch |err| {
+            _ = try self.out.print("Error {s}\n", .{@errorName(err)});
+            continue;
+        };
+        const signal = self.process_line(line) catch |err| {
+            _ = try self.out.print("Error: {s}\n", .{@errorName(err)});
+            continue;
+        };
         switch (signal) {
             .Continue => {},
             .Exit => break,

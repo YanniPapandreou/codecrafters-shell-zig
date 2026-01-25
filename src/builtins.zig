@@ -50,6 +50,23 @@ pub const History = struct {
             try writer.print("   {d}  {s}\n", .{ i + 1, entry });
         }
     }
+
+    fn read_from_file(self: *History, path: []const u8) !void {
+        // get file contents
+        const file_contents = try std.fs.cwd().readFileAlloc(self.allocator, path, 1024 * 1024);
+        defer self.allocator.free(file_contents);
+
+        var lines = mem.splitScalar(u8, file_contents, '\n');
+        while (lines.next()) |line| {
+            // trim trailing '\r' (for Windows CRLF)
+            var trimmed = line;
+            if (trimmed.len > 0 and trimmed[trimmed.len - 1] == '\r') {
+                trimmed = trimmed[0 .. trimmed.len - 1];
+            }
+            if (trimmed.len == 0) continue;
+            try self.append(trimmed);
+        }
+    }
 };
 
 pub fn echo(writer: *std.io.Writer, args: []const u8) !void {
@@ -62,6 +79,11 @@ pub fn history(writer: *std.io.Writer, hist: *History, args: []const u8) !void {
         return;
     }
     const args_trimmed = mem.trim(u8, args, " ");
+    if (mem.startsWith(u8, args_trimmed, "-r ")) {
+        const path = args_trimmed[3..];
+        try hist.read_from_file(path);
+        return;
+    }
     const n = std.fmt.parseInt(usize, args_trimmed, 10) catch |err| {
         switch (err) {
             std.fmt.ParseIntError.InvalidCharacter => {
