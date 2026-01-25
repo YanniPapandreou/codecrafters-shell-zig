@@ -160,7 +160,8 @@ pub fn type_of_cmd(allocator: mem.Allocator, writer: *std.Io.Writer, args: []con
     if (mem.eql(u8, args, "exit") or
         mem.eql(u8, args, "echo") or
         mem.eql(u8, args, "history") or
-        mem.eql(u8, args, "type"))
+        mem.eql(u8, args, "type") or
+        mem.eql(u8, args, "pwd"))
     {
         try writer.print("{s} is a shell builtin\n", .{args});
     } else {
@@ -175,4 +176,10 @@ pub fn type_of_cmd(allocator: mem.Allocator, writer: *std.Io.Writer, args: []con
         };
         try writer.print("{s} is {s}\n", .{ args, full_path });
     }
+}
+
+pub fn pwd(allocator: mem.Allocator, writer: *std.Io.Writer) !void {
+    const PWD = try std.process.getEnvVarOwned(allocator, "PWD");
+    defer allocator.free(PWD);
+    try writer.print("{s}\n", .{PWD});
 }

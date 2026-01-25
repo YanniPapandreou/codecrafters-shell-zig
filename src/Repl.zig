@@ -32,7 +32,6 @@ pub fn init(allocator: Allocator, prompt: []const u8, in: *std.Io.Reader, out: *
     try history.startup();
     history.save_loc += history.entries.items.len;
 
-
     return Repl{
         .allocator = allocator,
         .prompt = prompt,
@@ -73,6 +72,8 @@ pub fn process_line(self: *Repl, line: []const u8) !ReplSignal {
         return .Exit;
     } else if (mem.eql(u8, line, "continue")) {
         return .Continue;
+    } else if (mem.eql(u8, line, "pwd")) {
+        try builtins.pwd(self.allocator, self.out);
     } else if (mem.startsWith(u8, line, "echo")) {
         const args = try utils.get_args("echo", line);
         try builtins.echo(self.out, args);
