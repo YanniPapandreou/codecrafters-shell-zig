@@ -2,21 +2,19 @@ const std = @import("std");
 
 // Learn more about this file here: https://ziglang.org/learn/build-system
 pub fn build(b: *std.Build) void {
-    const utils_mod = b.addModule("utils", .{
-        .root_source_file = b.path("src/utils.zig"),
+    const core_mod = b.addModule("core", .{
+        .root_source_file = b.path("src/root.zig"),
         .target = b.graph.host,
     });
-
-    const builtins_mod = b.addModule("builtins", .{ .root_source_file = b.path("src/builtins.zig"), .target = b.graph.host, .imports = &.{
-        .{ .name = "utils", .module = utils_mod },
-    } });
 
     const exe = b.addExecutable(.{
         .name = "main",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = b.graph.host,
-            .imports = &.{ .{ .name = "builtins", .module = builtins_mod }, .{ .name = "utils", .module = utils_mod } },
+            .imports = &.{
+                .{ .name = "core", .module = core_mod },
+            },
         }),
     });
 

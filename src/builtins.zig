@@ -1,6 +1,6 @@
 const std = @import("std");
 const mem = std.mem;
-const utils = @import("utils");
+const utils = @import("utils.zig");
 
 const ParserError = utils.ParserError;
 const RuntimeError = utils.RuntimeError;
