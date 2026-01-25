@@ -72,7 +72,7 @@ pub fn parse_external(input: []const u8) ?ExternalCommand {
 }
 
 
-pub fn run_external(allocator: mem.Allocator, writer: *std.io.Writer, external_cmd: ExternalCommand) !void {
+pub fn run_external(allocator: mem.Allocator, writer: *std.Io.Writer, external_cmd: ExternalCommand) !void {
     const full_path = find_exec(allocator, external_cmd.cmd) catch |err| {
         switch (err) {
             RuntimeError.CommandNotFound => {

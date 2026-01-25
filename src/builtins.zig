@@ -36,13 +36,13 @@ pub const History = struct {
         try self.entries.append(self.allocator, input_copy);
     }
 
-    fn print(self: *History, writer: *std.io.Writer) !void {
+    fn print(self: *History, writer: *std.Io.Writer) !void {
         for (self.entries.items, 1..) |entry, i| {
             try writer.print("   {d}  {s}\n", .{ i, entry });
         }
     }
 
-    fn print_last_n(self: *History, writer: *std.io.Writer, n: usize) !void {
+    fn print_last_n(self: *History, writer: *std.Io.Writer, n: usize) !void {
         if (n == 0) {
             return;
         }
@@ -114,11 +114,11 @@ pub const History = struct {
     }
 };
 
-pub fn echo(writer: *std.io.Writer, args: []const u8) !void {
+pub fn echo(writer: *std.Io.Writer, args: []const u8) !void {
     try writer.print("{s}\n", .{args});
 }
 
-pub fn history(writer: *std.io.Writer, hist: *History, args: []const u8) !void {
+pub fn history(writer: *std.Io.Writer, hist: *History, args: []const u8) !void {
     if (args.len == 0) {
         try hist.print(writer);
         return;
@@ -152,7 +152,7 @@ pub fn history(writer: *std.io.Writer, hist: *History, args: []const u8) !void {
     try hist.print_last_n(writer, n);
 }
 
-pub fn type_of_cmd(allocator: mem.Allocator, writer: *std.io.Writer, args: []const u8) !void {
+pub fn type_of_cmd(allocator: mem.Allocator, writer: *std.Io.Writer, args: []const u8) !void {
     if (mem.containsAtLeastScalar(u8, args, 1, ' ')) {
         try writer.print("Error: `type` only accepts 1 argument\n", .{});
         return ParserError.TooManyArgs;
