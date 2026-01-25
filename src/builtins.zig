@@ -67,6 +67,21 @@ pub const History = struct {
             try self.append(trimmed);
         }
     }
+
+    fn write_to_file(self: *History, path: []const u8) !void {
+        const cwd = std.fs.cwd();
+        const handle = try cwd.createFile(path, .{
+            .truncate = true,
+        });
+        defer handle.close();
+
+        for (self.history.items) |entry| {
+            _ = try handle.write(entry);
+            _ = try handle.write("\n");
+        }
+        // append trailing new line character
+        _ = try handle.write("\n");
+    }
 };
 
 pub fn echo(writer: *std.io.Writer, args: []const u8) !void {
@@ -82,6 +97,10 @@ pub fn history(writer: *std.io.Writer, hist: *History, args: []const u8) !void {
     if (mem.startsWith(u8, args_trimmed, "-r ")) {
         const path = args_trimmed[3..];
         try hist.read_from_file(path);
+        return;
+    } else if (mem.startsWith(u8, args_trimmed, "-w ")) {
+        const path = args_trimmed[3..];
+        try hist.write_to_file(path);
         return;
     }
     const n = std.fmt.parseInt(usize, args_trimmed, 10) catch |err| {
