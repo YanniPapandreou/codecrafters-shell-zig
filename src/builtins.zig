@@ -7,14 +7,14 @@ const RuntimeError = utils.RuntimeError;
 
 pub const History = struct {
     allocator: mem.Allocator,
-    history: std.ArrayList([]const u8),
+    entries: std.ArrayList([]const u8),
     save_loc: usize,
 
     pub fn init(allocator: mem.Allocator) !History {
         const hist = try std.ArrayList([]const u8).initCapacity(allocator, 0);
         return History{
             .allocator = allocator,
-            .history = hist,
+            .entries = hist,
             .save_loc = 0,
         };
     }
@@ -24,20 +24,20 @@ pub const History = struct {
         if (!mem.eql(u8, HISTFILE, "")) {
             self.write_to_file(HISTFILE, true) catch unreachable;
         }
-        for (self.history.items) |line| {
+        for (self.entries.items) |line| {
             self.allocator.free(line);
         }
-        self.history.deinit(self.allocator);
+        self.entries.deinit(self.allocator);
     }
 
     pub fn append(self: *History, input: []const u8) !void {
         const input_copy = try self.allocator.alloc(u8, input.len);
         @memcpy(input_copy, input);
-        try self.history.append(self.allocator, input_copy);
+        try self.entries.append(self.allocator, input_copy);
     }
 
     fn print(self: *History, writer: *std.io.Writer) !void {
-        for (self.history.items, 1..) |entry, i| {
+        for (self.entries.items, 1..) |entry, i| {
             try writer.print("   {d}  {s}\n", .{ i, entry });
         }
     }
@@ -46,13 +46,13 @@ pub const History = struct {
         if (n == 0) {
             return;
         }
-        const n_history = self.history.items.len;
+        const n_history = self.entries.items.len;
         if (n >= n_history) {
             try self.print(writer);
             return;
         }
         for ((n_history - n)..n_history) |i| {
-            const entry = self.history.items[i];
+            const entry = self.entries.items[i];
             try writer.print("   {d}  {s}\n", .{ i + 1, entry });
         }
     }
@@ -89,7 +89,7 @@ pub const History = struct {
 
         const start_index = if (should_append) self.save_loc else 0;
 
-        for (self.history.items[start_index..]) |entry| {
+        for (self.entries.items[start_index..]) |entry| {
             _ = try handle.write(entry);
             _ = try handle.write("\n");
             self.save_loc += 1;

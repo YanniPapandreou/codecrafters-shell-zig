@@ -30,6 +30,8 @@ pub fn init(allocator: Allocator, prompt: []const u8, in: *std.Io.Reader, out: *
     var history = try History.init(allocator);
     // try to load history from file specified by env var HISTFILE (if exists)
     try history.startup();
+    history.save_loc += history.entries.items.len;
+
 
     return Repl{
         .allocator = allocator,
