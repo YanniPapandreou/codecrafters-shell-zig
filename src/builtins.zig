@@ -53,7 +53,7 @@ pub const History = struct {
         }
     }
 
-    fn read_from_file(self: *History, path: []const u8) !void {
+    pub fn read_from_file(self: *History, path: []const u8) !void {
         // get file contents
         const file_contents = try std.fs.cwd().readFileAlloc(self.allocator, path, 1024 * 1024);
         defer self.allocator.free(file_contents);

@@ -27,7 +27,10 @@ in: *std.Io.Reader,
 out: *std.Io.Writer,
 
 pub fn init(allocator: Allocator, prompt: []const u8, in: *std.Io.Reader, out: *std.Io.Writer) !Repl {
-    const history = try History.init(allocator);
+    var history = try History.init(allocator);
+    const HISTFILE = try std.process.getEnvVarOwned(allocator, "HISTFILE");
+    try history.read_from_file(HISTFILE);
+
     return Repl{
         .allocator = allocator,
         .prompt = prompt,
