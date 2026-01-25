@@ -186,11 +186,17 @@ pub fn pwd(allocator: mem.Allocator, writer: *std.Io.Writer) !void {
 }
 
 pub fn cd(writer: *std.Io.Writer, args: []const u8) !void {
-    _ = writer;
     if (args.len == 0) {
         return ParserError.InvalidArgs;
     }
-    var dir = try std.fs.openDirAbsolute(args, .{});
+    var dir = std.fs.openDirAbsolute(args, .{}) catch |err|
+        switch (err) {
+            std.fs.File.OpenError.FileNotFound => {
+                try writer.print("cd: {s}: No such file or directory\n", .{args});
+                return;
+            },
+            else => return err,
+        };
     defer dir.close();
     try dir.setAsCwd();
 }
