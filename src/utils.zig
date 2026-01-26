@@ -28,6 +28,7 @@ pub fn get_args_str(cmd: []const u8, input: []const u8) ParserError![]const u8 {
 pub fn get_args(allocator: mem.Allocator, args_str: []const u8) !ArgList {
     var args = std.ArrayList([]const u8).empty;
     var quote_open: bool = false;
+    var first_space: bool = false;
     var arg = std.ArrayList(u8).empty;
     for (args_str) |c| {
         switch (c) {
@@ -39,7 +40,8 @@ pub fn get_args(allocator: mem.Allocator, args_str: []const u8) !ArgList {
                 }
             },
             ' ' => {
-                if (quote_open) {
+                first_space = !first_space;
+                if (quote_open or first_space) {
                     try arg.append(allocator, c);
                 }
             },
