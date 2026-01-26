@@ -28,21 +28,21 @@ pub fn get_args_str(cmd: []const u8, input: []const u8) ParserError![]const u8 {
 pub fn get_args(allocator: mem.Allocator, args_str: []const u8) !ArgList {
     var args = std.ArrayList([]const u8).empty;
     var quote_open: bool = false;
-    var first_space: bool = false;
     var arg = std.ArrayList(u8).empty;
     for (args_str) |c| {
         switch (c) {
             '\'' => {
                 quote_open = !quote_open;
-                if (!quote_open) {
-                    const new_arg = try arg.toOwnedSlice(allocator);
-                    try args.append(allocator, new_arg);
-                }
             },
             ' ' => {
-                first_space = !first_space;
-                if (quote_open or first_space) {
+                if (quote_open) {
                     try arg.append(allocator, c);
+                } else if (arg.items.len > 0) {
+                    // End of an argument
+                    const new_arg = try arg.toOwnedSlice(allocator);
+                    try args.append(allocator, new_arg);
+                    arg.clearRetainingCapacity();
+                    // Do not append empty arguments for consecutive spaces
                 }
             },
             else => {
