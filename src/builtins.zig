@@ -124,19 +124,19 @@ pub fn history(writer: *std.Io.Writer, hist: *History, args: ArgList) !void {
     if (args.len == 0) {
         try hist.print(writer);
         return;
-    } else if (args.len != 1 or args.len != 2) {
+    } else if (args.len != 1 and args.len != 2) {
         return ParserError.WrongNumberOfArgs;
     }
     if (mem.eql(u8, args[0], "-r")) {
-        const path = args[1][3..];
+        const path = args[1];
         try hist.read_from_file(path);
         return;
     } else if (mem.eql(u8, args[0], "-w")) {
-        const path = args[1][3..];
+        const path = args[1];
         try hist.write_to_file(path, false);
         return;
     } else if (mem.eql(u8, args[0], "-a")) {
-        const path = args[1][3..];
+        const path = args[1];
         try hist.write_to_file(path, true);
         return;
     }
