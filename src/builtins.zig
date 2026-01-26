@@ -4,6 +4,7 @@ const utils = @import("utils.zig");
 
 const ParserError = utils.ParserError;
 const RuntimeError = utils.RuntimeError;
+const ArgList = utils.ArgList;
 
 pub const History = struct {
     allocator: mem.Allocator,
@@ -114,37 +115,39 @@ pub const History = struct {
     }
 };
 
-pub fn echo(writer: *std.Io.Writer, args: []const u8) !void {
-    try writer.print("{s}\n", .{args});
+pub fn echo(allocator: mem.Allocator, writer: *std.Io.Writer, args: ArgList) !void {
+    const out = try mem.join(allocator, " ", args);
+    try writer.print("{s}\n", .{out});
 }
 
-pub fn history(writer: *std.Io.Writer, hist: *History, args: []const u8) !void {
+pub fn history(writer: *std.Io.Writer, hist: *History, args: ArgList) !void {
     if (args.len == 0) {
         try hist.print(writer);
         return;
+    } else if (args.len != 1 or args.len != 2) {
+        return ParserError.WrongNumberOfArgs;
     }
-    const args_trimmed = mem.trim(u8, args, " ");
-    if (mem.startsWith(u8, args_trimmed, "-r ")) {
-        const path = args_trimmed[3..];
+    if (mem.eql(u8, args[0], "-r")) {
+        const path = args[1][3..];
         try hist.read_from_file(path);
         return;
-    } else if (mem.startsWith(u8, args_trimmed, "-w ")) {
-        const path = args_trimmed[3..];
+    } else if (mem.eql(u8, args[0], "-w")) {
+        const path = args[1][3..];
         try hist.write_to_file(path, false);
         return;
-    } else if (mem.startsWith(u8, args_trimmed, "-a ")) {
-        const path = args_trimmed[3..];
+    } else if (mem.eql(u8, args[0], "-a")) {
+        const path = args[1][3..];
         try hist.write_to_file(path, true);
         return;
     }
-    const n = std.fmt.parseInt(usize, args_trimmed, 10) catch |err| {
+    const n = std.fmt.parseInt(usize, args[0], 10) catch |err| {
         switch (err) {
             std.fmt.ParseIntError.InvalidCharacter => {
-                try writer.print("Error: `history` accepts at most 1 integer argument, got `{s}`\n", .{args_trimmed});
+                try writer.print("Error: `history` accepts at most 1 integer argument, got `{s}`\n", .{args[0]});
                 return RuntimeError.InvalidArgs;
             },
             std.fmt.ParseIntError.Overflow => {
-                try writer.print("Error: number too large `{s}`\n", .{args_trimmed});
+                try writer.print("Error: number too large `{s}`\n", .{args[0]});
                 return RuntimeError.InvalidArgs;
             },
         }
@@ -152,30 +155,31 @@ pub fn history(writer: *std.Io.Writer, hist: *History, args: []const u8) !void {
     try hist.print_last_n(writer, n);
 }
 
-pub fn type_of_cmd(allocator: mem.Allocator, writer: *std.Io.Writer, args: []const u8) !void {
-    if (mem.containsAtLeastScalar(u8, args, 1, ' ')) {
+pub fn type_of_cmd(allocator: mem.Allocator, writer: *std.Io.Writer, args: ArgList) !void {
+    if (args.len != 1) {
         try writer.print("Error: `type` only accepts 1 argument\n", .{});
-        return ParserError.TooManyArgs;
+        return ParserError.WrongNumberOfArgs;
     }
-    if (mem.eql(u8, args, "exit") or
-        mem.eql(u8, args, "echo") or
-        mem.eql(u8, args, "history") or
-        mem.eql(u8, args, "type") or
-        mem.eql(u8, args, "pwd") or
-        mem.eql(u8, args, "cd"))
+    const arg = args[0];
+    if (mem.eql(u8, arg, "exit") or
+        mem.eql(u8, arg, "echo") or
+        mem.eql(u8, arg, "history") or
+        mem.eql(u8, arg, "type") or
+        mem.eql(u8, arg, "pwd") or
+        mem.eql(u8, arg, "cd"))
     {
-        try writer.print("{s} is a shell builtin\n", .{args});
+        try writer.print("{s} is a shell builtin\n", .{arg});
     } else {
-        const full_path = utils.find_exec(allocator, args) catch |err| {
+        const full_path = utils.find_exec(allocator, arg) catch |err| {
             switch (err) {
                 RuntimeError.CommandNotFound => {
-                    try writer.print("{s}: not found\n", .{args});
+                    try writer.print("{s}: not found\n", .{arg});
                     return;
                 },
                 else => unreachable,
             }
         };
-        try writer.print("{s} is {s}\n", .{ args, full_path });
+        try writer.print("{s} is {s}\n", .{ arg, full_path });
     }
 }
 
@@ -185,17 +189,18 @@ pub fn pwd(allocator: mem.Allocator, writer: *std.Io.Writer) !void {
     try writer.print("{s}\n", .{cwd});
 }
 
-pub fn cd(allocator: mem.Allocator, writer: *std.Io.Writer, args: []const u8) !void {
-    if (args.len == 0) {
-        return ParserError.InvalidArgs;
+pub fn cd(allocator: mem.Allocator, writer: *std.Io.Writer, args: ArgList) !void {
+    if (args.len > 1) {
+        return ParserError.TooManyArgs;
     }
-    const path = if (mem.eql(u8, args, "~"))
+    const arg = if (args.len == 0) "~" else args[0];
+    const path = if (mem.eql(u8, arg, "~"))
         try std.process.getEnvVarOwned(allocator, "HOME")
     else
-        std.fs.realpathAlloc(allocator, args) catch |err|
+        std.fs.realpathAlloc(allocator, arg) catch |err|
             switch (err) {
                 std.posix.RealPathError.FileNotFound => {
-                    try writer.print("cd: {s}: No such file or directory\n", .{args});
+                    try writer.print("cd: {s}: No such file or directory\n", .{arg});
                     return;
                 },
                 else => return err,

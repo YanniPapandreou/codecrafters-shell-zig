@@ -2,14 +2,13 @@ const std = @import("std");
 const mem = std.mem;
 const builtin = @import("builtin");
 
-pub const ParserError = error{ InvalidArgs, TooManyArgs, EmptyInput, BadInput };
+pub const ParserError = error{ InvalidArgs, TooManyArgs, EmptyInput, BadInput, WrongNumberOfArgs };
 pub const RuntimeError = error{ CommandNotFound, InvalidArgs };
 
-pub const ExternalCommand = struct { cmd: []const u8, args: ?[]const u8 };
+pub const ArgList = [][]const u8;
+const ExternalCommand = struct { cmd: []const u8, args: ArgList };
 
-pub const pathListSep: u8 = if (builtin.os.tag == .windows) ';' else ':';
-
-const ArgList = std.ArrayList([]const u8);
+const pathListSep: u8 = if (builtin.os.tag == .windows) ';' else ':';
 
 pub fn get_args_str(cmd: []const u8, input: []const u8) ParserError![]const u8 {
     if (!mem.containsAtLeast(u8, input, 1, cmd)) {
@@ -26,9 +25,8 @@ pub fn get_args_str(cmd: []const u8, input: []const u8) ParserError![]const u8 {
 }
 
 // parses arguments, handling single quotes for grouping; caller owns memory of returned ArgList
-pub fn get_args(allocator: mem.Allocator, cmd: []const u8, input: []const u8) ParserError!ArgList {
-    const args_str = try get_args_str(cmd, input);
-    var args = ArgList.empty;
+pub fn get_args(allocator: mem.Allocator, args_str: []const u8) !ArgList {
+    var args = std.ArrayList([]const u8).empty;
     var quote_open: bool = false;
     var arg = std.ArrayList(u8).empty;
     for (args_str) |c| {
@@ -50,7 +48,11 @@ pub fn get_args(allocator: mem.Allocator, cmd: []const u8, input: []const u8) Pa
             },
         }
     }
-    return args;
+    if (arg.items.len > 0) {
+        const final_arg = try arg.toOwnedSlice(allocator);
+        try args.append(allocator, final_arg);
+    }
+    return args.toOwnedSlice(allocator);
 }
 
 fn get_path(allocator: mem.Allocator) ![]u8 {
@@ -90,15 +92,18 @@ pub fn find_exec(allocator: mem.Allocator, cmd: []const u8) ![]u8 {
     return search_path(allocator, PATH, cmd);
 }
 
-pub fn parse_external(input: []const u8) ?ExternalCommand {
+pub fn parse_external(allocator: mem.Allocator, input: []const u8) !?ExternalCommand {
     if (input.len == 0) {
         return null;
     }
-    if (mem.containsAtLeastScalar(u8, input, 1, ' ')) {
-        var it = mem.splitScalar(u8, input, ' ');
-        return ExternalCommand{ .cmd = it.first(), .args = it.rest() };
+    const space_pos_result = mem.indexOf(u8, input, " ");
+    if (space_pos_result) |i| {
+        const cmd = input[0..i];
+        const args_str = input[i + 1 ..];
+        const args = try get_args(allocator, args_str);
+        return ExternalCommand{ .cmd = cmd, .args = args };
     }
-    return ExternalCommand{ .cmd = input, .args = null };
+    return ExternalCommand{ .cmd = input, .args = &[_][]const u8{} };
 }
 
 pub fn run_external(allocator: mem.Allocator, writer: *std.Io.Writer, external_cmd: ExternalCommand) !void {
@@ -112,15 +117,11 @@ pub fn run_external(allocator: mem.Allocator, writer: *std.Io.Writer, external_c
         }
     };
     defer allocator.free(full_path);
-    var argv = try std.ArrayList([]const u8).initCapacity(allocator, 1);
-    argv.appendAssumeCapacity(external_cmd.cmd);
+    defer allocator.free(external_cmd.args);
+    var argv = try std.ArrayList([]const u8).initCapacity(allocator, 1 + external_cmd.args.len);
     defer argv.deinit(allocator);
-    if (external_cmd.args) |args| {
-        var it = mem.splitScalar(u8, args, ' ');
-        while (it.next()) |arg| {
-            try argv.append(allocator, arg);
-        }
-    }
+    argv.appendAssumeCapacity(external_cmd.cmd);
+    argv.appendSliceAssumeCapacity(external_cmd.args);
     const proc = try std.process.Child.run(.{
         .argv = argv.items,
         .allocator = allocator,
@@ -129,5 +130,18 @@ pub fn run_external(allocator: mem.Allocator, writer: *std.Io.Writer, external_c
     // on success, we own the output streams
     defer allocator.free(proc.stdout);
     defer allocator.free(proc.stderr);
-    try writer.print("{s}", .{proc.stdout});
+
+    switch (proc.term) {
+        .Exited => |code| {
+            if (code == 0) {
+                try writer.print("{s}", .{proc.stdout});
+            } else {
+                try writer.print("{s}", .{proc.stderr});
+            }
+        },
+        else => {
+            try writer.print("External process terminated abnormally", .{});
+            try writer.print("{s}", .{proc.stderr});
+        },
+    }
 }

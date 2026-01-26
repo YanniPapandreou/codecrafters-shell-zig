@@ -75,19 +75,23 @@ pub fn process_line(self: *Repl, line: []const u8) !ReplSignal {
     } else if (mem.eql(u8, line, "pwd")) {
         try builtins.pwd(self.allocator, self.out);
     } else if (mem.startsWith(u8, line, "echo")) {
-        const args = try utils.get_args_str("echo", line);
-        try builtins.echo(self.out, args);
+        const args_str = try utils.get_args_str("echo", line);
+        const args = try utils.get_args(self.allocator, args_str);
+        try builtins.echo(self.allocator, self.out, args);
     } else if (mem.startsWith(u8, line, "history")) {
-        const args = try utils.get_args_str("history", line);
+        const args_str = try utils.get_args_str("history", line);
+        const args = try utils.get_args(self.allocator, args_str);
         try builtins.history(self.out, &self.history, args);
     } else if (mem.startsWith(u8, line, "type")) {
-        const args = try utils.get_args_str("type", line);
+        const args_str = try utils.get_args_str("type", line);
+        const args = try utils.get_args(self.allocator, args_str);
         try builtins.type_of_cmd(self.allocator, self.out, args);
     } else if (mem.startsWith(u8, line, "cd")) {
-        const args = try utils.get_args_str("cd", line);
+        const args_str = try utils.get_args_str("cd", line);
+        const args = try utils.get_args(self.allocator, args_str);
         try builtins.cd(self.allocator, self.out, args);
     } else {
-        const external_cmd = utils.parse_external(line) orelse return .Continue;
+        const external_cmd = try utils.parse_external(self.allocator, line) orelse return .Continue;
         try utils.run_external(self.allocator, self.out, external_cmd);
     }
     return .Continue;
