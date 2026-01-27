@@ -30,8 +30,14 @@ pub fn get_args(allocator: mem.Allocator, args_str: []const u8) !ArgList {
     var single_quote_open: bool = false;
     var double_quote_open: bool = false;
     var arg = std.ArrayList(u8).empty;
-    for (args_str) |c| {
+    var i: usize = 0;
+    while (i < args_str.len) : (i += 1) {
+        const c = args_str[i];
         switch (c) {
+            '\\' => {
+                try arg.append(allocator, args_str[i + 1]);
+                i += 1;
+            },
             '\'' => {
                 if (!double_quote_open) {
                     single_quote_open = !single_quote_open;
