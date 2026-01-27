@@ -35,8 +35,14 @@ pub fn get_args(allocator: mem.Allocator, args_str: []const u8) !ArgList {
         const c = args_str[i];
         switch (c) {
             '\\' => {
-                try arg.append(allocator, args_str[i + 1]);
-                i += 1;
+                if (single_quote_open) {
+                    // append this backslash literally
+                    try arg.append(allocator, c);
+                } else {
+                    // escape next character
+                    try arg.append(allocator, args_str[i + 1]);
+                    i += 1;
+                }
             },
             '\'' => {
                 if (!double_quote_open) {
