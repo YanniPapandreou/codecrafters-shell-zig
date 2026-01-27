@@ -122,6 +122,17 @@ pub fn parse_external(allocator: mem.Allocator, input: []const u8) !?ExternalCom
     if (input.len == 0) {
         return null;
     }
+    if (input[0] == '\'' or input[0] == '"') {
+        const closing_quote_pos = mem.indexOf(u8, input[1..], &[_]u8{input[0]});
+        if (closing_quote_pos) |i| {
+            const cmd = input[1 .. i + 1];
+            const args_str = input[i + 2 ..];
+            const args = try get_args(allocator, args_str);
+            return ExternalCommand{ .cmd = cmd, .args = args };
+        } else {
+            return ParserError.BadInput;
+        }
+    }
     const space_pos_result = mem.indexOf(u8, input, " ");
     if (space_pos_result) |i| {
         const cmd = input[0..i];
