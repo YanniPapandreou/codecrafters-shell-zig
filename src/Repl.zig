@@ -71,6 +71,8 @@ pub fn process_line(self: *Repl, line: []const u8) !ReplSignal {
     if (mem.eql(u8, line, "exit")) {
         return .Exit;
     } else if (mem.eql(u8, line, "continue")) {
+        // TODO: this is a hack - is there a better way to handle empty input?
+        //       in particular, this would confuse the shell for commands called "continue"
         return .Continue;
     } else if (mem.eql(u8, line, "pwd")) {
         try builtins.pwd(self.allocator, self.out);
