@@ -27,15 +27,45 @@ pub fn get_args_str(cmd: []const u8, input: []const u8) ParserError![]const u8 {
 // parses arguments, handling single quotes for grouping; caller owns memory of returned ArgList
 pub fn get_args(allocator: mem.Allocator, args_str: []const u8) !ArgList {
     var args = std.ArrayList([]const u8).empty;
-    var quote_open: bool = false;
+    var single_quote_open: bool = false;
+    var double_quote_open: bool = false;
     var arg = std.ArrayList(u8).empty;
     for (args_str) |c| {
         switch (c) {
             '\'' => {
-                quote_open = !quote_open;
+                if (!double_quote_open) {
+                    single_quote_open = !single_quote_open;
+                    // if single_quote_open is now true it means we hit an opening
+                    // single quote so continue to next character
+                    if (single_quote_open) continue;
+                    // single_quote_open is now false, meaning we hit a closing single quote.
+                    // The argument has now ended
+                    const new_arg = try arg.toOwnedSlice(allocator);
+                    try args.append(allocator, new_arg);
+                    arg.clearRetainingCapacity();
+                } else {
+                    // double quotes are open, so just append the single quote character
+                    try arg.append(allocator, c);
+                }
+            },
+            '"' => {
+                if (!single_quote_open) {
+                    double_quote_open = !double_quote_open;
+                    // if double_quote_open is now true it means we hit an opening
+                    // double quote so continue to the next character
+                    if (double_quote_open) continue;
+                    // double_quote_open is now false, meaning we hit a closing double quote.
+                    // The argument has now ended
+                    const new_arg = try arg.toOwnedSlice(allocator);
+                    try args.append(allocator, new_arg);
+                    arg.clearRetainingCapacity();
+                } else {
+                    // single quotes are open, so just append the double quote character
+                    try arg.append(allocator, c);
+                }
             },
             ' ' => {
-                if (quote_open) {
+                if (single_quote_open or double_quote_open) {
                     try arg.append(allocator, c);
                 } else if (arg.items.len > 0) {
                     // End of an argument
