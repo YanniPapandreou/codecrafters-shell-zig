@@ -35,32 +35,14 @@ pub fn get_args(allocator: mem.Allocator, args_str: []const u8) !ArgList {
             '\'' => {
                 if (!double_quote_open) {
                     single_quote_open = !single_quote_open;
-                    // if single_quote_open is now true it means we hit an opening
-                    // single quote so continue to next character
-                    if (single_quote_open) continue;
-                    // single_quote_open is now false, meaning we hit a closing single quote.
-                    // The argument has now ended
-                    const new_arg = try arg.toOwnedSlice(allocator);
-                    try args.append(allocator, new_arg);
-                    arg.clearRetainingCapacity();
                 } else {
-                    // double quotes are open, so just append the single quote character
                     try arg.append(allocator, c);
                 }
             },
             '"' => {
                 if (!single_quote_open) {
                     double_quote_open = !double_quote_open;
-                    // if double_quote_open is now true it means we hit an opening
-                    // double quote so continue to the next character
-                    if (double_quote_open) continue;
-                    // double_quote_open is now false, meaning we hit a closing double quote.
-                    // The argument has now ended
-                    const new_arg = try arg.toOwnedSlice(allocator);
-                    try args.append(allocator, new_arg);
-                    arg.clearRetainingCapacity();
                 } else {
-                    // single quotes are open, so just append the double quote character
                     try arg.append(allocator, c);
                 }
             },
