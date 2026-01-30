@@ -3,7 +3,9 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 const builtins = @import("builtins.zig");
 const History = builtins.History;
-const utils = @import("utils.zig");
+
+const Parser = @import("Parser.zig");
+const ParsedCommand = Parser.ParsedCommand;
 
 const ReplSignal = enum {
     Exit,
@@ -23,6 +25,7 @@ const Repl = @This();
 allocator: Allocator,
 prompt: []const u8,
 history: History,
+parser: Parser,
 in: *std.Io.Reader,
 out: *std.Io.Writer,
 
@@ -31,11 +34,13 @@ pub fn init(allocator: Allocator, prompt: []const u8, in: *std.Io.Reader, out: *
     // try to load history from file specified by env var HISTFILE (if exists)
     try history.startup();
     history.save_loc += history.entries.items.len;
+    const parser = Parser.init(allocator);
 
     return Repl{
         .allocator = allocator,
         .prompt = prompt,
         .history = history,
+        .parser = parser,
         .in = in,
         .out = out,
     };
@@ -56,7 +61,7 @@ pub fn readLine(self: *Repl) ![]const u8 {
     // Convert C string to Zig slice
     const command = std.mem.span(c_input);
     if (command.len == 0) {
-        return "continue";
+        return "";
     }
 
     // Add to readline's in-memory history
@@ -67,34 +72,27 @@ pub fn readLine(self: *Repl) ![]const u8 {
     return command;
 }
 
-pub fn process_line(self: *Repl, line: []const u8) !ReplSignal {
-    if (mem.eql(u8, line, "exit")) {
-        return .Exit;
-    } else if (mem.eql(u8, line, "continue")) {
-        // TODO: this is a hack - is there a better way to handle empty input?
-        //       in particular, this would confuse the shell for commands called "continue"
-        return .Continue;
-    } else if (mem.eql(u8, line, "pwd")) {
-        try builtins.pwd(self.allocator, self.out);
-    } else if (mem.startsWith(u8, line, "echo")) {
-        const args_str = try utils.get_args_str("echo", line);
-        const args = try utils.get_args(self.allocator, args_str);
-        try builtins.echo(self.allocator, self.out, args);
-    } else if (mem.startsWith(u8, line, "history")) {
-        const args_str = try utils.get_args_str("history", line);
-        const args = try utils.get_args(self.allocator, args_str);
-        try builtins.history(self.out, &self.history, args);
-    } else if (mem.startsWith(u8, line, "type")) {
-        const args_str = try utils.get_args_str("type", line);
-        const args = try utils.get_args(self.allocator, args_str);
-        try builtins.type_of_cmd(self.allocator, self.out, args);
-    } else if (mem.startsWith(u8, line, "cd")) {
-        const args_str = try utils.get_args_str("cd", line);
-        const args = try utils.get_args(self.allocator, args_str);
-        try builtins.cd(self.allocator, self.out, args);
+fn process_line(self: *Repl, line: []const u8) !ReplSignal {
+    const processed_cmd = try self.parser.parse(line);
+    defer self.allocator.free(processed_cmd.args);
+    if (processed_cmd.is_builtin) {
+        if (mem.eql(u8, processed_cmd.cmd, "exit")) {
+            return .Exit;
+        } else if (mem.eql(u8, processed_cmd.cmd, "NoOp")) {
+            return .Continue;
+        } else if (mem.eql(u8, processed_cmd.cmd, "pwd")) {
+            try builtins.pwd(self.allocator, self.out);
+        } else if (mem.eql(u8, processed_cmd.cmd, "echo")) {
+            try builtins.echo(self.allocator, self.out, processed_cmd.args);
+        } else if (mem.eql(u8, processed_cmd.cmd, "history")) {
+            try builtins.history(self.out, &self.history, processed_cmd.args);
+        } else if (mem.eql(u8, processed_cmd.cmd, "type")) {
+            try builtins.type_of_cmd(self.allocator, self.out, processed_cmd.args);
+        } else if (mem.eql(u8, processed_cmd.cmd, "cd")) {
+            try builtins.cd(self.allocator, self.out, processed_cmd.args);
+        }
     } else {
-        const external_cmd = try utils.parse_external(self.allocator, line) orelse return .Continue;
-        try utils.run_external(self.allocator, self.out, external_cmd);
+        try builtins.run_external(self.allocator, self.out, processed_cmd);
     }
     return .Continue;
 }
