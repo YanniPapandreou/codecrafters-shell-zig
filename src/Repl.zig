@@ -33,7 +33,44 @@ parser: Parser,
 in: *std.Io.Reader,
 out: *std.Io.Writer,
 
+const builtin_cmds = [_][]const u8{ "echo", "exit" };
+
+// Completion generator for readline
+fn completion_generator(text: [*c]const u8, state: c_int) callconv(.c) [*c]u8 {
+    // static variable to keep track of which match we're on
+    // (Readline calls this repeatedly with incrementing state)
+    const gpa = std.heap.c_allocator;
+    var match_index: usize = @intCast(state);
+    while (match_index < builtin_cmds.len) : (match_index += 1) {
+        const cmd = builtin_cmds[match_index];
+        if (std.mem.startsWith(u8, cmd, std.mem.span(text))) {
+            // Allocate a C string with a trailing space
+            const len = cmd.len + 2; // +1 for space, +1 for null terminator
+            var buf = gpa.alloc(u8, len) catch return null;
+            @memcpy(buf[0..cmd.len], cmd);
+            buf[cmd.len] = ' ';
+            buf[cmd.len + 1] = 0;
+            return buf.ptr;
+        }
+    }
+    return null;
+}
+
+// Completion entry point for readline
+fn zig_completion(text: [*c]const u8, start: c_int, end: c_int) callconv(.c) [*c][*c]u8 {
+    _ = start; _ = end;
+    return c.rl_completion_matches(text, completion_generator);
+}
+
+pub fn setup_readline_completion() void {
+    // Set the attempted completion function
+    c.rl_attempted_completion_function = zig_completion;
+}
+
 pub fn init(allocator: Allocator, prompt: []const u8, in: *std.Io.Reader, out: *std.Io.Writer) !Repl {
+    // Setup completion with readline
+    setup_readline_completion();
+
     var history = try History.init(allocator);
     // try to load history from file specified by env var HISTFILE (if exists)
     try history.startup();
