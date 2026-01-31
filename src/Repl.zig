@@ -87,6 +87,7 @@ fn process_line(self: *Repl, line: []const u8) !ReplSignal {
     const processed_cmd = try self.parser.parse(line);
     defer self.allocator.free(processed_cmd.args);
     var writer = try self.get_writer(processed_cmd.redirection);
+    defer writer.deinit();
     if (processed_cmd.is_builtin) {
         if (mem.eql(u8, processed_cmd.cmd, "exit")) {
             return .Exit;
@@ -104,7 +105,7 @@ fn process_line(self: *Repl, line: []const u8) !ReplSignal {
             try builtins.cd(self.allocator, &writer, processed_cmd.args);
         }
     } else {
-        try builtins.run_external(self.allocator, &writer, processed_cmd);
+        try builtins.run_external(self.allocator, &writer, processed_cmd, self.out);
     }
     return .Continue;
 }

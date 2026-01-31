@@ -241,7 +241,7 @@ pub fn parse(self: *Parser, input: []const u8) !ParsedCommand {
             .redirection = redirect,
         };
     } else {
-        const external_cmd = try self.parse_external(line);
+        const external_cmd = try self.parse_external(input);
         return external_cmd;
     }
 }

@@ -15,7 +15,7 @@ pub const Output = union(OutputType) {
     stdout: *std.Io.Writer,
     file: std.fs.File,
 
-    fn deinit(self: *Output) void {
+    pub fn deinit(self: *Output) void {
         switch (self.*) {
             .file => |file| file.close(),
             .stdout => {},
@@ -152,7 +152,6 @@ pub const History = struct {
 
 pub fn echo(allocator: mem.Allocator, writer: *Output, args: ArgList) !void {
     const out = try mem.join(allocator, " ", args);
-    defer writer.deinit();
     try writer.print(allocator, "{s}\n", .{out});
 }
 
@@ -291,11 +290,11 @@ pub fn find_exec(allocator: mem.Allocator, cmd: []const u8) ![]u8 {
     return search_path(allocator, PATH, cmd);
 }
 
-pub fn run_external(allocator: mem.Allocator, writer: *Output, external_cmd: ParsedCommand) !void {
+pub fn run_external(allocator: mem.Allocator, writer: *Output, external_cmd: ParsedCommand, out: *std.Io.Writer) !void {
     const full_path = find_exec(allocator, external_cmd.cmd) catch |err| {
         switch (err) {
             RuntimeError.CommandNotFound => {
-                try writer.print(allocator, "{s}: not found\n", .{external_cmd.cmd});
+                try out.print("{s}: not found\n", .{external_cmd.cmd});
                 return;
             },
             else => unreachable,
@@ -306,6 +305,7 @@ pub fn run_external(allocator: mem.Allocator, writer: *Output, external_cmd: Par
     defer argv.deinit(allocator);
     argv.appendAssumeCapacity(external_cmd.cmd);
     argv.appendSliceAssumeCapacity(external_cmd.args);
+
     const proc = try std.process.Child.run(.{
         .argv = argv.items,
         .allocator = allocator,
@@ -315,18 +315,18 @@ pub fn run_external(allocator: mem.Allocator, writer: *Output, external_cmd: Par
     defer allocator.free(proc.stdout);
     defer allocator.free(proc.stderr);
 
-    // TODO: need to separate stdout and stderr for redirects somehow
     switch (proc.term) {
         .Exited => |code| {
             if (code == 0) {
-                try writer.print(allocator, "{s}", .{proc.stdout});
+                try writer.writeAll(proc.stdout);
             } else {
-                try writer.print(allocator, "{s}", .{proc.stderr});
+                // TODO: dont add this
+                try out.writeAll(proc.stderr);
             }
         },
         else => {
-            try writer.writeAll("External process terminated abnormally");
-            try writer.print(allocator, "{s}", .{proc.stderr});
+            try out.writeAll("External process terminated abnormally");
+            try out.writeAll(proc.stderr);
         },
     }
 }
