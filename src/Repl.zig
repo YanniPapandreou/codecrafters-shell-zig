@@ -65,6 +65,7 @@ fn zig_completion(text: [*c]const u8, start: c_int, end: c_int) callconv(.c) [*c
 pub fn setup_readline_completion() void {
     // Set the attempted completion function
     c.rl_attempted_completion_function = zig_completion;
+    // disable the automatic appending of a space after completion
     c.rl_completion_append_character = 0;
 }
 
