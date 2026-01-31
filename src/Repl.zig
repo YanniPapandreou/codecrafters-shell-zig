@@ -79,14 +79,26 @@ fn readLine(self: *Repl) ![]const u8 {
 fn get_writers(self: *Repl, maybe_redirect: ?Redirect) !Writers {
     if (maybe_redirect) |redirect| {
         if (redirect.out_file) |out_file| {
-            const file = try std.fs.cwd().createFile(out_file, .{ .truncate = true });
+            const file = try std.fs.cwd().createFile(out_file, .{
+                .truncate = if (redirect.append) false else true,
+            });
+            if (redirect.append) {
+                // go to end of file to append
+                try file.seekFromEnd(0);
+            }
             const out_output = Output{ .file = file };
             return Writers{
                 .out = out_output,
                 .err = Output{ .default = self.out },
             };
         } else if (redirect.err_file) |err_file| {
-            const file = try std.fs.cwd().createFile(err_file, .{ .truncate = true });
+            const file = try std.fs.cwd().createFile(err_file, .{
+                .truncate = if (redirect.append) false else true,
+            });
+            if (redirect.append) {
+                // go to end of file to append
+                try file.seekFromEnd(0);
+            }
             const err_output = Output{ .file = file };
             return Writers{
                 .out = Output{ .default = self.out },

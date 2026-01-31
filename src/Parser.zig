@@ -42,48 +42,60 @@ pub fn init(allocator: Allocator) Parser {
     };
 }
 
-fn parse_redirect(_: *Parser, input: []const u8) !?Redirect {
+fn split_helper(_: *Parser, input: []const u8, pattern: []const u8) ![2][]const u8 {
+    var parts: [2][]const u8 = [2][]const u8{ undefined, undefined };
+    var it = mem.splitSequence(u8, input, pattern);
+    const cleaned_input = it.first();
+    const file = it.next().?;
+    // Should be two parts
+    if (it.next()) |_| {
+        return ParserError.BadInput;
+    }
+    parts[0] = cleaned_input;
+    parts[1] = file;
+    return parts;
+}
+
+fn parse_redirect(self: *Parser, input: []const u8) !?Redirect {
     if (mem.containsAtLeast(u8, input, 1, " 1> ")) {
-        var it = mem.splitSequence(u8, input, " 1> ");
-        const cleaned_input = it.first();
-        const out_file = it.next().?;
-        // Should be only one redirection
-        if (it.next()) |_| {
-            return ParserError.BadInput;
-        }
+        const parts = try self.split_helper(input, " 1> ");
         return Redirect{
-            .cleaned_input = cleaned_input,
-            .out_file = out_file,
+            .cleaned_input = parts[0],
+            .out_file = parts[1],
             .err_file = null,
             .append = false,
         };
     } else if (mem.containsAtLeast(u8, input, 1, " > ")) {
-        var it = mem.splitSequence(u8, input, " > ");
-        const cleaned_input = it.first();
-        const out_file = it.next().?;
-        // Should be only one redirection
-        if (it.next()) |_| {
-            return ParserError.BadInput;
-        }
+        const parts = try self.split_helper(input, " > ");
         return Redirect{
-            .cleaned_input = cleaned_input,
-            .out_file = out_file,
+            .cleaned_input = parts[0],
+            .out_file = parts[1],
             .err_file = null,
             .append = false,
         };
     } else if (mem.containsAtLeast(u8, input, 1, " 2> ")) {
-        var it = mem.splitSequence(u8, input, " 2> ");
-        const cleaned_input = it.first();
-        const err_file = it.next().?;
-        // Should be only one redirection
-        if (it.next()) |_| {
-            return ParserError.BadInput;
-        }
+        const parts = try self.split_helper(input, " > ");
         return Redirect{
-            .cleaned_input = cleaned_input,
+            .cleaned_input = parts[0],
             .out_file = null,
-            .err_file = err_file,
+            .err_file = parts[1],
             .append = false,
+        };
+    } else if (mem.containsAtLeast(u8, input, 1, " 1>> ")) {
+        const parts = try self.split_helper(input, " 1>> ");
+        return Redirect{
+            .cleaned_input = parts[0],
+            .out_file = parts[1],
+            .err_file = null,
+            .append = true,
+        };
+    } else if (mem.containsAtLeast(u8, input, 1, " >> ")) {
+        const parts = try self.split_helper(input, " >> ");
+        return Redirect{
+            .cleaned_input = parts[0],
+            .out_file = parts[1],
+            .err_file = null,
+            .append = true,
         };
     } else {
         return null;
