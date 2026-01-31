@@ -9,35 +9,45 @@ const ArgList = Parser.ArgList;
 
 pub const RuntimeError = error{ CommandNotFound, InvalidArgs };
 
-const OutputType = enum { stdout, file };
+const OutputType = enum { default, file };
 
 pub const Output = union(OutputType) {
-    stdout: *std.Io.Writer,
+    default: *std.Io.Writer,
     file: std.fs.File,
 
     pub fn deinit(self: *Output) void {
         switch (self.*) {
             .file => |file| file.close(),
-            .stdout => {},
+            .default => {},
         }
     }
 
     fn writeAll(self: *Output, content: []const u8) !void {
         switch (self.*) {
-            .stdout => |stdout| try stdout.writeAll(content),
+            .default => |default| try default.writeAll(content),
             .file => |file| try file.writeAll(content),
         }
     }
 
     fn print(self: *Output, allocator: mem.Allocator, comptime fmt: []const u8, args: anytype) !void {
         switch (self.*) {
-            .stdout => |stdout| try stdout.print(fmt, args),
+            .default => |default| try default.print(fmt, args),
             .file => |file| {
                 const content = try std.fmt.allocPrint(allocator, fmt, args);
                 defer allocator.free(content);
                 try file.writeAll(content);
             },
         }
+    }
+};
+
+pub const Writers = struct {
+    out: Output,
+    err: Output,
+
+    pub fn deinit(self: *Writers) void {
+        self.out.deinit();
+        self.err.deinit();
     }
 };
 
@@ -72,24 +82,24 @@ pub const History = struct {
         try self.entries.append(self.allocator, input_copy);
     }
 
-    fn print(self: *History, writer: *Output) !void {
+    fn print(self: *History, writers: *Writers) !void {
         for (self.entries.items, 1..) |entry, i| {
-            try writer.print(self.allocator, "   {d}  {s}\n", .{ i, entry });
+            try writers.out.print(self.allocator, "   {d}  {s}\n", .{ i, entry });
         }
     }
 
-    fn print_last_n(self: *History, writer: *Output, n: usize) !void {
+    fn print_last_n(self: *History, writers: *Writers, n: usize) !void {
         if (n == 0) {
             return;
         }
         const n_history = self.entries.items.len;
         if (n >= n_history) {
-            try self.print(writer);
+            try self.print(writers);
             return;
         }
         for ((n_history - n)..n_history) |i| {
             const entry = self.entries.items[i];
-            try writer.print(self.allocator, "   {d}  {s}\n", .{ i + 1, entry });
+            try writers.out.print(self.allocator, "   {d}  {s}\n", .{ i + 1, entry });
         }
     }
 
@@ -150,14 +160,14 @@ pub const History = struct {
     }
 };
 
-pub fn echo(allocator: mem.Allocator, writer: *Output, args: ArgList) !void {
+pub fn echo(allocator: mem.Allocator, writers: *Writers, args: ArgList) !void {
     const out = try mem.join(allocator, " ", args);
-    try writer.print(allocator, "{s}\n", .{out});
+    try writers.out.print(allocator, "{s}\n", .{out});
 }
 
-pub fn history(writer: *Output, hist: *History, args: ArgList) !void {
+pub fn history(writers: *Writers, hist: *History, args: ArgList) !void {
     if (args.len == 0) {
-        try hist.print(writer);
+        try hist.print(writers);
         return;
     } else if (args.len != 1 and args.len != 2) {
         return ParserError.WrongNumberOfArgs;
@@ -178,21 +188,21 @@ pub fn history(writer: *Output, hist: *History, args: ArgList) !void {
     const n = std.fmt.parseInt(usize, args[0], 10) catch |err| {
         switch (err) {
             std.fmt.ParseIntError.InvalidCharacter => {
-                try writer.print(hist.allocator, "Error: `history` accepts at most 1 integer argument, got `{s}`\n", .{args[0]});
+                try writers.err.print(hist.allocator, "Error: `history` accepts at most 1 integer argument, got `{s}`\n", .{args[0]});
                 return RuntimeError.InvalidArgs;
             },
             std.fmt.ParseIntError.Overflow => {
-                try writer.print(hist.allocator, "Error: number too large `{s}`\n", .{args[0]});
+                try writers.err.print(hist.allocator, "Error: number too large `{s}`\n", .{args[0]});
                 return RuntimeError.InvalidArgs;
             },
         }
     };
-    try hist.print_last_n(writer, n);
+    try hist.print_last_n(writers, n);
 }
 
-pub fn type_of_cmd(allocator: mem.Allocator, writer: *Output, args: ArgList) !void {
+pub fn type_of_cmd(allocator: mem.Allocator, writers: *Writers, args: ArgList) !void {
     if (args.len != 1) {
-        try writer.print(allocator, "Error: `type` only accepts 1 argument\n", .{});
+        try writers.err.print(allocator, "Error: `type` only accepts 1 argument\n", .{});
         return ParserError.WrongNumberOfArgs;
     }
     const arg = args[0];
@@ -203,28 +213,28 @@ pub fn type_of_cmd(allocator: mem.Allocator, writer: *Output, args: ArgList) !vo
         mem.eql(u8, arg, "pwd") or
         mem.eql(u8, arg, "cd"))
     {
-        try writer.print(allocator, "{s} is a shell builtin\n", .{arg});
+        try writers.out.print(allocator, "{s} is a shell builtin\n", .{arg});
     } else {
         const full_path = find_exec(allocator, arg) catch |err| {
             switch (err) {
                 RuntimeError.CommandNotFound => {
-                    try writer.print(allocator, "{s}: not found\n", .{arg});
+                    try writers.err.print(allocator, "{s}: not found\n", .{arg});
                     return;
                 },
                 else => unreachable,
             }
         };
-        try writer.print(allocator, "{s} is {s}\n", .{ arg, full_path });
+        try writers.out.print(allocator, "{s} is {s}\n", .{ arg, full_path });
     }
 }
 
-pub fn pwd(allocator: mem.Allocator, writer: *Output) !void {
+pub fn pwd(allocator: mem.Allocator, writers: *Writers) !void {
     const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(cwd);
-    try writer.print(allocator, "{s}\n", .{cwd});
+    try writers.out.print(allocator, "{s}\n", .{cwd});
 }
 
-pub fn cd(allocator: mem.Allocator, writer: *Output, args: ArgList) !void {
+pub fn cd(allocator: mem.Allocator, writers: *Writers, args: ArgList) !void {
     if (args.len > 1) {
         return ParserError.TooManyArgs;
     }
@@ -235,7 +245,7 @@ pub fn cd(allocator: mem.Allocator, writer: *Output, args: ArgList) !void {
         std.fs.realpathAlloc(allocator, arg) catch |err|
             switch (err) {
                 std.posix.RealPathError.FileNotFound => {
-                    try writer.print(allocator, "cd: {s}: No such file or directory\n", .{arg});
+                    try writers.err.print(allocator, "cd: {s}: No such file or directory\n", .{arg});
                     return;
                 },
                 else => return err,
@@ -243,7 +253,7 @@ pub fn cd(allocator: mem.Allocator, writer: *Output, args: ArgList) !void {
     var dir = std.fs.openDirAbsolute(path, .{}) catch |err|
         switch (err) {
             std.fs.File.OpenError.FileNotFound => {
-                try writer.print(allocator, "cd: {s}: No such file or directory\n", .{path});
+                try writers.err.print(allocator, "cd: {s}: No such file or directory\n", .{path});
                 return;
             },
             else => return err,
@@ -290,11 +300,11 @@ pub fn find_exec(allocator: mem.Allocator, cmd: []const u8) ![]u8 {
     return search_path(allocator, PATH, cmd);
 }
 
-pub fn run_external(allocator: mem.Allocator, writer: *Output, external_cmd: ParsedCommand, out: *std.Io.Writer) !void {
+pub fn run_external(allocator: mem.Allocator, writers: *Writers, external_cmd: ParsedCommand) !void {
     const full_path = find_exec(allocator, external_cmd.cmd) catch |err| {
         switch (err) {
             RuntimeError.CommandNotFound => {
-                try out.print("{s}: not found\n", .{external_cmd.cmd});
+                try writers.err.print(allocator, "{s}: not found\n", .{external_cmd.cmd});
                 return;
             },
             else => unreachable,
@@ -318,14 +328,14 @@ pub fn run_external(allocator: mem.Allocator, writer: *Output, external_cmd: Par
     switch (proc.term) {
         .Exited => |code| {
             // Always write stdout to the redirected output
-            try writer.writeAll(proc.stdout);
+            try writers.out.writeAll(proc.stdout);
             if (code != 0) {
-                try out.writeAll(proc.stderr);
+                try writers.err.writeAll(proc.stderr);
             }
         },
         else => {
-            try out.writeAll("External process terminated abnormally");
-            try out.writeAll(proc.stderr);
+            try writers.err.writeAll("External process terminated abnormally");
+            try writers.err.writeAll(proc.stderr);
         },
     }
 }

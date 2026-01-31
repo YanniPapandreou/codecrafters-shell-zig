@@ -3,12 +3,20 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 
 const Parser = @This();
-pub const ParserError = error{ InvalidArgs, TooManyArgs, EmptyInput, BadInput, WrongNumberOfArgs };
+pub const ParserError = error{
+    InvalidArgs,
+    TooManyArgs,
+    EmptyInput,
+    BadInput,
+    WrongNumberOfArgs,
+    BadRedirect,
+};
 
 pub const ArgList = [][]const u8;
 pub const Redirect = struct {
     cleaned_input: []const u8,
-    to_file: []const u8,
+    out_file: ?[]const u8,
+    err_file: ?[]const u8,
     append: bool = false,
 };
 
@@ -16,14 +24,14 @@ pub const ParsedCommand = struct {
     cmd: []const u8,
     args: ArgList,
     is_builtin: bool,
-    redirection: ?Redirect,
+    redirect: ?Redirect,
 };
 
 pub const NoOpCommand = ParsedCommand{
     .cmd = "NoOp",
     .args = &[_][]const u8{},
     .is_builtin = true,
-    .redirection = null,
+    .redirect = null,
 };
 
 allocator: Allocator,
@@ -38,27 +46,43 @@ fn parse_redirect(_: *Parser, input: []const u8) !?Redirect {
     if (mem.containsAtLeast(u8, input, 1, " 1> ")) {
         var it = mem.splitSequence(u8, input, " 1> ");
         const cleaned_input = it.first();
-        const to_file = it.next().?;
+        const out_file = it.next().?;
         // Should be only one redirection
         if (it.next()) |_| {
             return ParserError.BadInput;
         }
         return Redirect{
             .cleaned_input = cleaned_input,
-            .to_file = to_file,
+            .out_file = out_file,
+            .err_file = null,
             .append = false,
         };
     } else if (mem.containsAtLeast(u8, input, 1, " > ")) {
         var it = mem.splitSequence(u8, input, " > ");
         const cleaned_input = it.first();
-        const to_file = it.next().?;
+        const out_file = it.next().?;
         // Should be only one redirection
         if (it.next()) |_| {
             return ParserError.BadInput;
         }
         return Redirect{
             .cleaned_input = cleaned_input,
-            .to_file = to_file,
+            .out_file = out_file,
+            .err_file = null,
+            .append = false,
+        };
+    } else if (mem.containsAtLeast(u8, input, 1, " 2> ")) {
+        var it = mem.splitSequence(u8, input, " 2> ");
+        const cleaned_input = it.first();
+        const err_file = it.next().?;
+        // Should be only one redirection
+        if (it.next()) |_| {
+            return ParserError.BadInput;
+        }
+        return Redirect{
+            .cleaned_input = cleaned_input,
+            .out_file = null,
+            .err_file = err_file,
             .append = false,
         };
     } else {
@@ -156,7 +180,7 @@ fn parse_external(self: *Parser, input: []const u8) !ParsedCommand {
                 .cmd = cmd,
                 .args = args,
                 .is_builtin = false,
-                .redirection = redirect,
+                .redirect = redirect,
             };
         } else {
             return ParserError.BadInput;
@@ -171,14 +195,14 @@ fn parse_external(self: *Parser, input: []const u8) !ParsedCommand {
             .cmd = cmd,
             .args = args,
             .is_builtin = false,
-            .redirection = redirect,
+            .redirect = redirect,
         };
     }
     return ParsedCommand{
         .cmd = line,
         .args = &[_][]const u8{},
         .is_builtin = false,
-        .redirection = redirect,
+        .redirect = redirect,
     };
 }
 
@@ -193,7 +217,7 @@ pub fn parse(self: *Parser, input: []const u8) !ParsedCommand {
             .cmd = "exit",
             .args = &[_][]const u8{},
             .is_builtin = true,
-            .redirection = redirect,
+            .redirect = redirect,
         };
     } else if (mem.eql(u8, line, "")) {
         return NoOpCommand;
@@ -202,7 +226,7 @@ pub fn parse(self: *Parser, input: []const u8) !ParsedCommand {
             .cmd = "pwd",
             .args = &[_][]const u8{},
             .is_builtin = true,
-            .redirection = redirect,
+            .redirect = redirect,
         };
     } else if (mem.startsWith(u8, line, "echo")) {
         const args_str = try self.get_args_str("echo", line);
@@ -211,7 +235,7 @@ pub fn parse(self: *Parser, input: []const u8) !ParsedCommand {
             .cmd = "echo",
             .args = args,
             .is_builtin = true,
-            .redirection = redirect,
+            .redirect = redirect,
         };
     } else if (mem.startsWith(u8, line, "history")) {
         const args_str = try self.get_args_str("history", line);
@@ -220,7 +244,7 @@ pub fn parse(self: *Parser, input: []const u8) !ParsedCommand {
             .cmd = "history",
             .args = args,
             .is_builtin = true,
-            .redirection = redirect,
+            .redirect = redirect,
         };
     } else if (mem.startsWith(u8, line, "type")) {
         const args_str = try self.get_args_str("type", line);
@@ -229,7 +253,7 @@ pub fn parse(self: *Parser, input: []const u8) !ParsedCommand {
             .cmd = "type",
             .args = args,
             .is_builtin = true,
-            .redirection = redirect,
+            .redirect = redirect,
         };
     } else if (mem.startsWith(u8, line, "cd")) {
         const args_str = try self.get_args_str("cd", line);
@@ -238,7 +262,7 @@ pub fn parse(self: *Parser, input: []const u8) !ParsedCommand {
             .cmd = "cd",
             .args = args,
             .is_builtin = true,
-            .redirection = redirect,
+            .redirect = redirect,
         };
     } else {
         const external_cmd = try self.parse_external(input);

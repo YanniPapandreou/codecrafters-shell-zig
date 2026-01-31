@@ -6,7 +6,9 @@ const History = builtins.History;
 
 const Parser = @import("Parser.zig");
 const ParsedCommand = Parser.ParsedCommand;
+const ParserError = Parser.ParserError;
 const Redirect = Parser.Redirect;
+const Writers = builtins.Writers;
 const Output = builtins.Output;
 
 const ReplSignal = enum {
@@ -74,38 +76,55 @@ fn readLine(self: *Repl) ![]const u8 {
     return command;
 }
 
-fn get_writer(self: *Repl, maybe_redirect: ?Redirect) !Output {
+fn get_writers(self: *Repl, maybe_redirect: ?Redirect) !Writers {
     if (maybe_redirect) |redirect| {
-        const filename = redirect.to_file;
-        const file = try std.fs.cwd().createFile(filename, .{ .truncate = true });
-        return Output{ .file = file };
+        if (redirect.out_file) |out_file| {
+            const file = try std.fs.cwd().createFile(out_file, .{ .truncate = true });
+            const out_output = Output{ .file = file };
+            return Writers{
+                .out = out_output,
+                .err = Output{ .default = self.out },
+            };
+        } else if (redirect.err_file) |err_file| {
+            const file = try std.fs.cwd().createFile(err_file, .{ .truncate = true });
+            const err_output = Output{ .file = file };
+            return Writers{
+                .out = Output{ .default = self.out },
+                .err = err_output,
+            };
+        } else {
+            return ParserError.BadRedirect;
+        }
     }
-    return Output{ .stdout = self.out };
+    return Writers{
+        .out = Output{ .default = self.out },
+        .err = Output{ .default = self.out },
+    };
 }
 
 fn process_line(self: *Repl, line: []const u8) !ReplSignal {
     const processed_cmd = try self.parser.parse(line);
     defer self.allocator.free(processed_cmd.args);
-    var writer = try self.get_writer(processed_cmd.redirection);
-    defer writer.deinit();
+    var writers = try self.get_writers(processed_cmd.redirect);
+    defer writers.deinit();
     if (processed_cmd.is_builtin) {
         if (mem.eql(u8, processed_cmd.cmd, "exit")) {
             return .Exit;
         } else if (mem.eql(u8, processed_cmd.cmd, "NoOp")) {
             return .Continue;
         } else if (mem.eql(u8, processed_cmd.cmd, "pwd")) {
-            try builtins.pwd(self.allocator, &writer);
+            try builtins.pwd(self.allocator, &writers);
         } else if (mem.eql(u8, processed_cmd.cmd, "echo")) {
-            try builtins.echo(self.allocator, &writer, processed_cmd.args);
+            try builtins.echo(self.allocator, &writers, processed_cmd.args);
         } else if (mem.eql(u8, processed_cmd.cmd, "history")) {
-            try builtins.history(&writer, &self.history, processed_cmd.args);
+            try builtins.history(&writers, &self.history, processed_cmd.args);
         } else if (mem.eql(u8, processed_cmd.cmd, "type")) {
-            try builtins.type_of_cmd(self.allocator, &writer, processed_cmd.args);
+            try builtins.type_of_cmd(self.allocator, &writers, processed_cmd.args);
         } else if (mem.eql(u8, processed_cmd.cmd, "cd")) {
-            try builtins.cd(self.allocator, &writer, processed_cmd.args);
+            try builtins.cd(self.allocator, &writers, processed_cmd.args);
         }
     } else {
-        try builtins.run_external(self.allocator, &writer, processed_cmd, self.out);
+        try builtins.run_external(self.allocator, &writers, processed_cmd);
     }
     return .Continue;
 }
