@@ -6,6 +6,8 @@ const History = builtins.History;
 
 const Parser = @import("Parser.zig");
 const ParsedCommand = Parser.ParsedCommand;
+const Redirect = Parser.Redirect;
+const Output = builtins.Output;
 
 const ReplSignal = enum {
     Exit,
@@ -50,7 +52,7 @@ pub fn deinit(self: *Repl) void {
     defer self.history.deinit();
 }
 
-pub fn readLine(self: *Repl) ![]const u8 {
+fn readLine(self: *Repl) ![]const u8 {
     // Use readline for input with prompt
     const c_prompt: [:0]const u8 = @ptrCast(self.prompt);
     const c_input = c.readline(c_prompt);
@@ -72,27 +74,37 @@ pub fn readLine(self: *Repl) ![]const u8 {
     return command;
 }
 
+fn get_writer(self: *Repl, maybe_redirect: ?Redirect) !Output {
+    if (maybe_redirect) |redirect| {
+        const filename = redirect.to_file;
+        const file = try std.fs.cwd().createFile(filename, .{ .truncate = true });
+        return Output{ .file = file };
+    }
+    return Output{ .stdout = self.out };
+}
+
 fn process_line(self: *Repl, line: []const u8) !ReplSignal {
     const processed_cmd = try self.parser.parse(line);
     defer self.allocator.free(processed_cmd.args);
+    var writer = try self.get_writer(processed_cmd.redirection);
     if (processed_cmd.is_builtin) {
         if (mem.eql(u8, processed_cmd.cmd, "exit")) {
             return .Exit;
         } else if (mem.eql(u8, processed_cmd.cmd, "NoOp")) {
             return .Continue;
         } else if (mem.eql(u8, processed_cmd.cmd, "pwd")) {
-            try builtins.pwd(self.allocator, self.out);
+            try builtins.pwd(self.allocator, &writer);
         } else if (mem.eql(u8, processed_cmd.cmd, "echo")) {
-            try builtins.echo(self.allocator, self.out, processed_cmd.args);
+            try builtins.echo(self.allocator, &writer, processed_cmd.args);
         } else if (mem.eql(u8, processed_cmd.cmd, "history")) {
-            try builtins.history(self.out, &self.history, processed_cmd.args);
+            try builtins.history(&writer, &self.history, processed_cmd.args);
         } else if (mem.eql(u8, processed_cmd.cmd, "type")) {
-            try builtins.type_of_cmd(self.allocator, self.out, processed_cmd.args);
+            try builtins.type_of_cmd(self.allocator, &writer, processed_cmd.args);
         } else if (mem.eql(u8, processed_cmd.cmd, "cd")) {
-            try builtins.cd(self.allocator, self.out, processed_cmd.args);
+            try builtins.cd(self.allocator, &writer, processed_cmd.args);
         }
     } else {
-        try builtins.run_external(self.allocator, self.out, processed_cmd);
+        try builtins.run_external(self.allocator, &writer, processed_cmd);
     }
     return .Continue;
 }
