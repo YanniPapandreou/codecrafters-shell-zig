@@ -45,7 +45,7 @@ fn completion_generator(text: [*c]const u8, state: c_int) callconv(.c) [*c]u8 {
         const cmd = builtin_cmds[match_index];
         if (std.mem.startsWith(u8, cmd, std.mem.span(text))) {
             // Allocate a C string with a trailing space
-            const len = cmd.len + 2; // +1 for space, +1 for null terminator
+            const len = cmd.len + 2;
             var buf = gpa.alloc(u8, len) catch return null;
             @memcpy(buf[0..cmd.len], cmd);
             buf[cmd.len] = ' ';
@@ -65,6 +65,7 @@ fn zig_completion(text: [*c]const u8, start: c_int, end: c_int) callconv(.c) [*c
 pub fn setup_readline_completion() void {
     // Set the attempted completion function
     c.rl_attempted_completion_function = zig_completion;
+    c.rl_completion_append_character = 0;
 }
 
 pub fn init(allocator: Allocator, prompt: []const u8, in: *std.Io.Reader, out: *std.Io.Writer) !Repl {
