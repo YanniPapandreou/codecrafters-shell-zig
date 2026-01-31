@@ -317,10 +317,9 @@ pub fn run_external(allocator: mem.Allocator, writer: *Output, external_cmd: Par
 
     switch (proc.term) {
         .Exited => |code| {
-            if (code == 0) {
-                try writer.writeAll(proc.stdout);
-            } else {
-                // TODO: dont add this
+            // Always write stdout to the redirected output
+            try writer.writeAll(proc.stdout);
+            if (code != 0) {
                 try out.writeAll(proc.stderr);
             }
         },
