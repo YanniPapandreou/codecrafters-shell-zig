@@ -74,7 +74,7 @@ fn parse_redirect(self: *Parser, input: []const u8) !?Redirect {
             .append = false,
         };
     } else if (mem.containsAtLeast(u8, input, 1, " 2> ")) {
-        const parts = try self.split_helper(input, " > ");
+        const parts = try self.split_helper(input, " 2> ");
         return Redirect{
             .cleaned_input = parts[0],
             .out_file = null,
@@ -96,6 +96,14 @@ fn parse_redirect(self: *Parser, input: []const u8) !?Redirect {
             .out_file = parts[1],
             .err_file = null,
             .append = true,
+        };
+    } else if (mem.containsAtLeast(u8, input, 1, " 2>> ")) {
+        const parts = try self.split_helper(input, " 2>> ");
+        return Redirect{
+            .cleaned_input = parts[0],
+            .out_file = null,
+            .err_file = parts[1],
+            .append = false,
         };
     } else {
         return null;
