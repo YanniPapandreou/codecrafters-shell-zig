@@ -103,7 +103,7 @@ fn parse_redirect(self: *Parser, input: []const u8) !?Redirect {
             .cleaned_input = parts[0],
             .out_file = null,
             .err_file = parts[1],
-            .append = false,
+            .append = true,
         };
     } else {
         return null;
